@@ -6,10 +6,29 @@ export default {
     if (request.method === 'POST') {
       try {
         const formData = await request.formData();
-        const prompt = formData.get('prompt') as string;
+        let prompt = formData.get('prompt') as string;
+        const style = formData.get('style') as string;
 
         if (!prompt) {
           return new Response('Missing prompt', { status: 400 });
+        }
+
+        // 优化中文提示词 - 添加英文关键词和细节描述
+        if (prompt && !/[a-zA-Z]/.test(prompt)) {
+          // 如果提示词主要是中文，添加一些优化策略
+          const styleMap: Record<string, string> = {
+            'photo': 'photographic, realistic, high quality, detailed',
+            'painting': 'painting, artistic, brush strokes, canvas texture',
+            'anime': 'anime style, japanese animation, detailed illustration',
+            'digital': 'digital art, detailed, vibrant colors',
+            '3d': '3D render, high detail, cinematic lighting'
+          };
+          
+          if (style && styleMap[style]) {
+            prompt = `${prompt}, ${styleMap[style]}`;
+          } else {
+            prompt = `${prompt}, high quality, detailed, professional`;
+          }
         }
 
         const inputs = { prompt };
@@ -33,11 +52,11 @@ export default {
     return new Response(
       `
       <!DOCTYPE html>
-      <html lang="en">
+      <html lang="zh-CN">
         <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Text to Image Generator</title>
+          <title>AI 图像生成器</title>
           <style>
             :root {
               --primary-color: #6366f1;
@@ -109,7 +128,7 @@ export default {
               font-weight: 500;
             }
             
-            input, textarea {
+            input, textarea, select {
               width: 100%;
               padding: 0.75rem;
               border: 1px solid var(--border);
@@ -119,7 +138,7 @@ export default {
               transition: border-color 0.2s;
             }
             
-            input:focus, textarea:focus {
+            input:focus, textarea:focus, select:focus {
               outline: none;
               border-color: var(--primary-color);
               box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
@@ -194,6 +213,28 @@ export default {
               transform: translateY(-2px);
             }
             
+            .tips {
+              background-color: #eff6ff;
+              border-left: 4px solid var(--primary-color);
+              padding: 1rem;
+              border-radius: 0 8px 8px 0;
+              margin: 1rem 0;
+              font-size: 0.9rem;
+            }
+            
+            .tips h3 {
+              margin-bottom: 0.5rem;
+              color: var(--primary-color);
+            }
+            
+            .tips ul {
+              padding-left: 1.2rem;
+            }
+            
+            .tips li {
+              margin-bottom: 0.3rem;
+            }
+            
             footer {
               text-align: center;
               margin-top: 2rem;
@@ -232,9 +273,31 @@ export default {
                       id="prompt" 
                       name="prompt" 
                       placeholder="例如：一只戴着墨镜的赛博朋克猫，霓虹灯背景，超现实主义风格..." 
-                      rows="3"
+                      rows="4"
                       required
                     ></textarea>
+                  </div>
+                  
+                  <div class="form-group">
+                    <label for="style">艺术风格（可选）</label>
+                    <select id="style" name="style">
+                      <option value="">默认</option>
+                      <option value="photo">照片风格</option>
+                      <option value="painting">绘画风格</option>
+                      <option value="anime">动漫风格</option>
+                      <option value="digital">数字艺术</option>
+                      <option value="3d">3D渲染</option>
+                    </select>
+                  </div>
+                  
+                  <div class="tips">
+                    <h3>提示词优化建议</h3>
+                    <ul>
+                      <li>描述越详细，效果越好。例如："一只坐在窗台上的橘色猫咪，阳光洒在毛发上"</li>
+                      <li>添加质量词如："高清、细节丰富、专业"</li>
+                      <li>指定艺术风格："油画、水彩画、照片写实"</li>
+                      <li>添加视角和光线描述："正面视角、柔和光线"</li>
+                    </ul>
                   </div>
                   
                   <button type="submit" id="generate-btn">
@@ -255,10 +318,10 @@ export default {
               <div class="card">
                 <h2>示例描述</h2>
                 <div class="examples">
-                  <div class="example" data-prompt="一只戴着王冠的可爱猫咪，奇幻风格，金色背景">戴着王冠的猫咪</div>
-                  <div class="example" data-prompt="未来城市中的飞行汽车，赛博朋克风格，霓虹灯">未来飞行汽车</div>
-                  <div class="example" data-prompt="宁静的山水画，水墨风格">水墨山水画</div>
-                  <div class="example" data-prompt="宇航员骑着马在太空，概念艺术">太空中的宇航员</div>
+                  <div class="example" data-prompt="一只戴着王冠的可爱猫咪，奇幻风格，金色背景，高清细节">戴着王冠的猫咪</div>
+                  <div class="example" data-prompt="未来城市中的飞行汽车，赛博朋克风格，霓虹灯，夜景，高清">未来飞行汽车</div>
+                  <div class="example" data-prompt="宁静的山水画，水墨风格，中国传统绘画，高山流水">水墨山水画</div>
+                  <div class="example" data-prompt="宇航员骑着马在太空，概念艺术，科幻风格，高清细节">太空中的宇航员</div>
                 </div>
               </div>
             </main>
@@ -284,6 +347,7 @@ export default {
                 e.preventDefault();
                 
                 const prompt = document.getElementById('prompt').value.trim();
+                const style = document.getElementById('style').value;
                 if (!prompt) return;
                 
                 // 显示加载状态
@@ -294,6 +358,7 @@ export default {
                 try {
                   const formData = new FormData();
                   formData.append('prompt', prompt);
+                  formData.append('style', style);
                   
                   const response = await fetch('/', {
                     method: 'POST',
